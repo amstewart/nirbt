@@ -1,0 +1,16 @@
+Work to be Done
+===============
+
+- Add 'amend' functionality which will pull information from a provided review-
+  board request and amend the local commit to reflect "ship-its", review-board
+  ids, and CAR ids.
+- Add 'update' functionality which will perform the same local data-gathering as
+  'upload', but will update an already-allocated review-board request, rather
+  than create a new one.
+- Expand the functionality of 'upload' and 'update' to allow for uploading any
+  arbitrary number of commits.
+- Harden the process of validating repositories on the RB server.
+- Add the ability for the user to verify which RB server repository they
+  intend to apply to, if it is not immediately obvious. (see the pick_repo
+  function).
+- Expand tool functionality to cover perforce changelists.
