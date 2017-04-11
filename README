@@ -1,0 +1,43 @@
+Requirements
+============
+
+- python2.7
+- cffi 1.0+ (for pygit2)
+- six
+- tox
+- python-rbtools
+- pycurl
+- pygit2
+- python-enum
+
+Installation
+============
+
+1. mkdir ~/.config
+2. cp -v ./nirbt.conf ~/.config
+3. cp -v ./nirbt.py /usr/bin
+4. Open browser and navigate to:
+    http://review-board.natinst.com/account/preferences/#api-tokens
+5. ed ~/.config/nirbt.conf and add your API token to the 'token' variable
+
+Usage
+=====
+
+Uploading
+---------
+
+*Creates a new review-board request for your latest commit and uploads the diff
+and sets the summary and description from the commit message.*
+
+1. cd to your local git repository
+2. Ensure that:
+    1. Your latest changes are commited.
+    2. Your latest commit message is appropriately set.
+    3. Your remotes are configured to point to the git.natinst.com repository
+       for your repo.
+3. nirbt.py [--verbose] upload
+
+Maintainer
+==========
+
+Alex Stewart <alex.stewart@ni.com>
