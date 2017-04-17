@@ -29,14 +29,14 @@ PATH_CONFIG = os.path.join(os.path.expanduser("~"), ".config", "nirbt.conf")
 # </constants>
 
 # <typedefs>
-"""Writeout output channels"""
 class CHAN(Enum):
+    """Writeout output channels"""
     NORMAL = 0
     VERBOSE = 1
     ERROR = 2
 
-"""Instance settings"""
 class Settings:
+    """Instance settings"""
     client = None
     commits = []
     commit_start = None
@@ -64,11 +64,16 @@ def main(args):
     args.func(args)
     return 0
 
-"""
-
-Returns : config object containing the final configuration settings
-"""
 def bootstrap(args):
+    """Evaluates command line arguments and configuration files and sets the
+    global 'settings' object accordingly. Requests the list of valid
+    repositories from the configured Review-Board server and confirms that the
+    current git repository has one of those repos as a remote. Selects one of
+    those valid repos as the settings.rb_repo.
+
+    Returns: True, if all operations were successful and a validated repo was
+             set; False, otherwise
+    """
     # parse cli args
     eval_args(args)
 
@@ -95,28 +100,26 @@ def bootstrap(args):
 
     return True
 
-"""
-Fetches a specified review request from the RB server and parses it for its 
-diff and comments. Based on the diff, determines which commit(s) from the 
-working repository are being reviewed. Then amends the commit messages for those
-commits based on the request comments. (Adding "Acked-by" and "Reviewed-by"
-lines as appropriate, consistent with NI practices.
-config : ConfigParser object of the current configuration
-
-Returns: True, if all actions succeeded; False, otherwise
-"""
 def command_amend(config):
+    """Fetches a specified review request from the RB server and parses it for
+    its diff and comments. Based on the diff, determines which commit(s) from
+    the working repository are being reviewed. Then amends the commit messages
+    for those commits based on the request comments. (Adding "Acked-by" and
+    "Reviewed-by" lines as appropriate, consistent with NI practices.
+    config : ConfigParser object of the current configuration
+    
+    Returns: True, if all actions succeeded; False, otherwise
+    """
     writeout(CHAN.ERROR, "Command not implemented.")
     pass
 
-"""
-Performs the same actions as command_upload, except updates an existing
-review request.
-config : ConfigParser object of the current configuration
-
-Returns: True, if all actions succeeded; False, otherwise
-"""
 def command_update(config):
+    """Performs the same actions as command_upload, except updates an existing
+    review request.
+    config : ConfigParser object of the current configuration
+    
+    Returns: True, if all actions succeeded; False, otherwise
+    """
     writeout(CHAN.ERROR, "Command not implemented.")
     pass
 
@@ -209,13 +212,12 @@ def command_upload(config):
 
     return True
 
-"""
-Searches an arbitrary local directory for a git repository
-repo_path : string path to search
-
-Returns: True, if a git repository is found; False, otherwise
-"""
 def discover_repo(repo_path):
+    """Searches an arbitrary local directory for a git repository
+    repo_path : string path to search
+    
+    Returns: True, if a git repository is found; False, otherwise
+    """
     try:
         writeout(CHAN.VERBOSE, "Searching location %s for git repo...\n",
                  repo_path)
@@ -228,13 +230,13 @@ def discover_repo(repo_path):
         writeout(CHAN.ERROR, "No repository found at %s\n", e)
         return False
 
-"""
-Converts the argument namespace parsed by ArgParser to the settings global.
-args: ArgParser argument namespace
-
-Returns: True
-"""
 def eval_args (args):
+    """Converts the argument namespace parsed by ArgParser to the settings
+    global.
+    args: ArgParser argument namespace
+    
+    Returns: True
+    """
     if args.verbose:
         settings.verbose = True
     if args.dry_run:
@@ -290,17 +292,17 @@ def get_commits(repo, start="HEAD", end=None):
         return None
     return (commits, repo.revparse_single(end + "^"))
 
-"""
-Presents the user with all of the repositories known to the RB server which are
-also configured as remotes for the local repository (see: selection). Selects
-the first viable repo from that set as the 'validated repo' and returns its id.
-selection : Set() of repo names which are the intersection of the local remotes
-            and the RB server's repos.
-rb_repos : List of Dicts of the RB servers repository information
-
-Returns: The id of the 'validated repo'
-"""
 def pick_repo(selection, rb_repos):
+    """Presents the user with all of the repositories known to the RB server
+    which are also configured as remotes for the local repository (see:
+    selection). Selects the first viable repo from that set as the 'validated
+    repo' and returns its id.
+    selection : Set() of repo names which are the intersection of the local
+                remotes and the RB server's repos.
+    rb_repos : List of Dicts of the RB servers repository information
+    
+    Returns: The id of the 'validated repo'
+    """
     if len(selection) is 0:
         writeout(CHAN.ERROR, "No repository(s) that match found on " \
                  "review-board server: %s\n", server)
@@ -351,16 +353,15 @@ def review_board_request(request_string):
     fp_buffer.close()
     return resp
 
-"""
-Fetches the list of repositories known to the review-board server setup in
-settings.client. Checks to make sure that at least one of the current local
-remotes points to a known repository. Selects the first valid repo as the
-'validated repository'.
-repo : pygit2.repository object for the local repository
-
-Returns: The repository information, as a dictionary, for the validated repo
-"""
 def validate_repo(repo):
+    """Fetches the list of repositories known to the review-board server setup
+    in settings.client. Checks to make sure that at least one of the current
+    local remotes points to a known repository. Selects the first valid repo as
+    the 'validated repository'.
+    repo : pygit2.repository object for the local repository
+    
+    Returns: The repository information, as a dictionary, for the validated repo
+    """
     # build a list of NI repository names from the configured remotes
     repo_names = set()
     for remote in repo.remotes:
@@ -400,14 +401,13 @@ def validate_repo(repo):
             return True
     return False
 
-"""
-Conditionally prints output strings based on the configured verbosity (from
-settings.verbosity)
-
-Returns: True, if the string should have been printed to console; False,
-         otherwise
-"""
 def writeout(channel, format_string, *args):
+    """Conditionally prints output strings based on the configured verbosity
+    (from settings.verbosity)
+    
+    Returns: True, if the string should have been printed to console; False,
+             otherwise
+    """
     if channel == CHAN.ERROR:
         sys.stderr.write("[!ERROR!] ")
         sys.stderr.write(format_string % args)
@@ -420,6 +420,7 @@ def writeout(channel, format_string, *args):
         return True
 
 if __name__ == "__main__":
+    """Command line entry point"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("-v", "--verbose", action='store_true')
     arg_parser.add_argument("-n", "--dry-run", action='store_true')
