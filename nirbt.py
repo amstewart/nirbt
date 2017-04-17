@@ -13,6 +13,7 @@ import json
 import re
 import os
 from subprocess import call
+import string
 import sys
 import tempfile
 import webbrowser
@@ -38,6 +39,8 @@ class CHAN(Enum):
 class Settings:
     client = None
     commits = []
+    commit_start = None
+    commit_end = None
     config = None
     dry_run = False
     local_repo = None
@@ -117,19 +120,22 @@ def command_update(config):
     writeout(CHAN.ERROR, "Command not implemented.")
     pass
 
-"""
-Creates a diff of the latest commit in the current working git branch and parses
-the commit message for its contents. Then creates a new review request on the
-Review-Board server and pushes the diff, summary, and description to its draft.
-Then opens the draft for the user to complete the remainder of the request and
-submit.
-config : ConfigParser object of the current configuration
-
-Returns: True, if all actions succeeded; False, otherwise
-"""
 def command_upload(config):
+    """Creates a diff of the latest commit in the current working git branch and
+    parses the commit message for its contents. Then creates a new review
+    request on the Review-Board server and pushes the diff, summary,
+    description, and tracking branch to its draft. Then opens the draft for the
+    user to complete the remainder of the request and publish.
+    config : ConfigParser object of the current configuration
+
+    Returns: True, if all actions succeeded; False, otherwise
+    """
     # TODO: Extend this functionality to upload additional commits as a batch.
     writeout(CHAN.VERBOSE, "\nGathering information for request...\n")
+
+    if not settings.commit_start:
+        settings.commit_start = "HEAD"
+    writeout(CHAN.NORMAL, "HEAD STRING=%s\n", settings.commit_start)
 
     tracking=None
     for branch in settings.local_repo.listall_branches(pygit2.GIT_BRANCH_LOCAL):
@@ -143,24 +149,37 @@ def command_upload(config):
                 pass
     writeout(CHAN.VERBOSE, "\tTracking = %s\n", tracking)
 
-    # We have to call 'git diff' here because the pygit2 API doesn't have the
-    # switch for --full-index yet.
-    fp_diff = tempfile.TemporaryFile()
-    call(['git', 'diff', '--full-index', 'HEAD^', 'HEAD'], stdout=fp_diff)
-    writeout(CHAN.VERBOSE, "\tDiff is %d bytes.\n", fp_diff.tell())
-    fp_diff.seek(0)
 
     # Get the commits that (hopefully) are the same as git-diff just created
     # the diff for. Concat their commit messages into fp_description
     fp_description = tempfile.TemporaryFile()
-    commits = get_commits(settings.local_repo, start=0, end=1)
-    for i in range(0, len(commits) - 1):
-        fp_description.write("%s - %s\n" % (commits[i].author.name,
-                                            commits[i].id))
-        fp_description.write("%s\n" % commits[i].message)
+    (commits, commit_prev) = get_commits(settings.local_repo,
+                                         start=settings.commit_start,
+                                         end=settings.commit_end)
+    for commit in commits:
+        fp_description.write("%s - %s\n" % (commit.author.name, commit.id))
+        fp_description.write("%s\n" % commit.message)
+        fp_description.write("-----\n")
     writeout(CHAN.VERBOSE, "\tDescription is %d bytes.\n",
              fp_description.tell())
     fp_description.seek(0)
+    if settings.dry_run:
+        writeout(CHAN.VERBOSE, "\tDescription=\n")
+        for line in fp_description.readlines():
+            writeout(CHAN.VERBOSE, "\t%s", line)
+
+        
+    # We have to call 'git diff' here because the pygit2 API doesn't have the
+    # switch for --full-index yet.
+    fp_diff = tempfile.TemporaryFile()
+    call(['git', 'diff', '--full-index', str(commit_prev.id),
+          str(commits[0].id)], stdout=fp_diff)
+    writeout(CHAN.VERBOSE, "\tDiff is %d bytes.\n", fp_diff.tell())
+    fp_diff.seek(0)
+    if settings.dry_run:
+        writeout(CHAN.VERBOSE, "\tDiff=\n")
+        for line in fp_diff.readlines():
+            writeout(CHAN.VERBOSE, "\t%s", line)
 
     # Now put the first line of the latest commit into the summary string
     summary = ""
@@ -215,49 +234,61 @@ args: ArgParser argument namespace
 
 Returns: True
 """
-def eval_args(args):
+def eval_args (args):
     if args.verbose:
         settings.verbose = True
     if args.dry_run:
         settings.dry_run = True
+    if args.commits:
+        test = string.split(args.commits, '..', 2)
+        try:
+            settings.commit_start = test[0]
+            settings.commit_end = test[1]
+        except IndexError:
+            pass
     return True
 
-"""
-Walks the current repository's commit log, beginning with the latest commit.
-Beginning with commit number 'start' and ending with commit 'end' (inclusive),
-adds those commits to a list. Returns that list.
-repo: pygit2.repository object of the local repository
-end : positive integer number of final commit to add to list (must be greater than
-      'start' or None, if only 'start' commit should be enlisted)
-start : positive integer number of the first commit to be enlisted (0 = HEAD,
-        1 = HEAD^1, N = HEAD^N)
+def get_commits(repo, start="HEAD", end=None):
+    """Walks the current repository's commit log, beginning with the git object
+    alluded to by the 'start' string and ending with the optional 'end' string.
+    repo  : pygit2.repository object of the local repository
+    start : a string, parsable by git, alluding to the first commit to return
+    end   : a string, parsable by git, alluding to the last commit to return;
+            defaults to the same value as 'start', if unasserted
 
-Returns: List of commits in the sequence specified
-"""
-def get_commits(repo, end=None, start=0):
+    Returns: A tuple who's first element is a list of all commit objects between
+    the start and end commits, inclusive. The second element is the parent
+    commit of the 'end' object, or None if it has no parent.
+    Throws: ValueError, when provided invalid 'start' or 'end' strings;
+            pygit2.GitError, when internal git errors occur
+    """
     git_walk_order = (pygit2.GIT_SORT_TOPOLOGICAL | pygit2.GIT_SORT_TIME)
 
-    if start < 0:
-        raise ValueError("Invalid start number (< 0).")
-    elif end and end < start:
-        raise ValueError("Invalid end number (end < start).")
+    commit_start = repo.revparse_single(start)
+    if not commit_start:
+        raise ValueError("Invalid starting commit: %s" % start)
 
+    if not end:
+        end = start
+    commit_end = repo.revparse_single(end)
+    if not commit_end:
+        raise ValueError("Invalid ending commit: %s" % end)
+    
     # store new commits into a temp variable, so that we don't blast the
     # global commits if we error out here
     commits = []
-    commit_number = start
     try:
-        for commit in settings.local_repo.walk(repo.head.target, git_walk_order):
+        for commit in settings.local_repo.walk(commit_start.id, git_walk_order):
             commits.append(commit)
-            writeout(CHAN.VERBOSE, "++COMMIT = %s\n", commit.id)
-            if not end or commit_number >= end:
+            writeout(CHAN.VERBOSE, "++COMMIT = %s : %s\n", commit.author.name,
+                     commit.id)
+            if commit.id == commit_end.id:
                 break
-            commit_number = commit_number + 1
     except pygit2.GitError as e:
         writeout(CHAN.ERROR, "Could not get commits. " \
                              "Probably no commits in repo.\n")
         return None
-    return commits
+    return (commits, repo.revparse_single(end + "^"))
 
 """
 Presents the user with all of the repositories known to the RB server which are
@@ -396,6 +427,8 @@ if __name__ == "__main__":
     subparsers = arg_parser.add_subparsers()
     parser_post = subparsers.add_parser('upload')
     parser_post.set_defaults(func=command_upload)
+    parser_post.add_argument('commits', nargs='?', action='store')
+
     parser_update = subparsers.add_parser('update')
     parser_update.set_defaults(func=command_update)
 
