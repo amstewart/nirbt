@@ -326,32 +326,6 @@ def pick_repo(selection, rb_repos):
 
     return sel_id
 
-"""
-Deprecated function for wrapping HTTP API requests to review-board servers.
-Written before I thought to check if RBTools has a python API (it does). I'm
-just keeping it around in the case that the RBTools API doesn't work out.
-request_string : HTTP API request string which will be appended to:
-                 '<server>/api/'
-
-Returns
-"""
-def review_board_request(request_string):
-    server = settings.config.get("NATI", "server")
-    protocol = settings.config.get("NATI", "protocol")
-    token = settings.config.get("NATI", "token")
-    url_base = protocol + "://" + server + "/api/"
-    fp_buffer = tempfile.TemporaryFile()
-    req = pycurl.Curl()
-    req.setopt(req.URL, (url_base + request_string))
-    req.setopt(req.HTTPHEADER, ['Authorization: token ' + token])
-    req.setopt(req.WRITEDATA, fp_buffer)
-    req.perform()
-    req.close()
-
-    fp_buffer.seek(0)
-    resp = json.load(fp_buffer)
-    fp_buffer.close()
-    return resp
 
 def validate_repo(repo):
     """Fetches the list of repositories known to the review-board server setup
